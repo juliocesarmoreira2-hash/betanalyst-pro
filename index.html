@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BetAnalyst Pro - Análises Esportivas Profissionais com IA</title>
+    <meta name="description" content="Análises esportivas profissionais com inteligência artificial. Pré-jogo, ao vivo, escanteios e cartões.">
+    <meta name="theme-color" content="#10b981">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0e17; --bg2: #111827; --bg3: #1a2332;
+            --accent: #10b981; --accent2: #059669; --accent3: #34d399;
+            --gold: #f59e0b; --gold2: #fbbf24;
+            --text: #e5e7eb; --text2: #9ca3af; --border: #374151;
+            --danger: #ef4444; --blue: #3b82f6; --purple: #8b5cf6;
+            --radius: 14px;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            background: var(--bg); color: var(--text);
+            min-height: 100vh; overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ===== LANDING PAGE ===== */
+        .landing { display: flex; flex-direction: column; min-height: 100vh; }
+
+        /* Hero */
+        .hero {
+            text-align: center; padding: 90px 20px 70px;
+            background: linear-gradient(135deg, #0a0e17 0%, #0f172a 30%, #1a1a3e 60%, #0a0e17 100%);
+            position: relative; overflow: hidden;
+        }
+        .hero::before {
+            content: ''; position: absolute; top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle at 30% 50%, rgba(16,185,129,0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 30%, rgba(139,92,246,0.07) 0%, transparent 50%),
+                        radial-gradient(circle at 50% 80%, rgba(59,130,246,0.05) 0%, transparent 40%);
+            animation: pulse 10s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+
+        .hero-content { position: relative; z-index: 1; max-width: 850px; margin: 0 auto; }
+        .badge-top {
+            display: inline-block; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3);
+            color: var(--accent3); padding: 6px 18px; border-radius: 50px;
+            font-size: 0.8rem; font-weight: 600; letter-spacing: 0.5px;
+            margin-bottom: 20px; text-transform: uppercase;
+        }
+        .logo { font-size: 3.2rem; font-weight: 900; margin-bottom: 12px; letter-spacing: -1px; }
+        .logo span { color: var(--accent); }
+        .logo .pro {
+            color: var(--gold); font-size: 1.4rem; vertical-align: super;
+            background: linear-gradient(135deg, var(--gold), var(--gold2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .hero p { font-size: 1.2rem; color: var(--text2); margin-bottom: 35px; line-height: 1.7; max-width: 600px; margin-left: auto; margin-right: auto; }
+
+        .hero-stats { display: flex; justify-content: center; gap: 48px; margin-bottom: 40px; flex-wrap: wrap; }
+        .stat { text-align: center; }
+        .stat-num { font-size: 2.2rem; font-weight: 800; color: var(--accent3); line-height: 1; }
+        .stat-label { font-size: 0.82rem; color: var(--text2); margin-top: 6px; }
+
+        .hero-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+        .hero-cta .btn { padding: 16px 36px; font-size: 1.05rem; }
+
+        /* Features */
+        .features {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px; padding: 60px 30px; max-width: 1100px; margin: 0 auto;
+        }
+        .feature-card {
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 32px 24px; text-align: center;
+            transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+        }
+        .feature-card:hover {
+            transform: translateY(-6px); border-color: var(--accent);
+            box-shadow: 0 12px 40px rgba(16,185,129,0.08);
+        }
+        .feature-icon { font-size: 2.8rem; margin-bottom: 16px; display: block; }
+        .feature-card h3 { font-size: 1.1rem; margin-bottom: 10px; color: var(--text); }
+        .feature-card p { font-size: 0.88rem; color: var(--text2); line-height: 1.6; }
+
+        /* How it works */
+        .how-section { padding: 60px 20px; text-align: center; background: var(--bg); }
+        .how-section h2 { font-size: 1.8rem; margin-bottom: 40px; }
+        .how-steps { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; max-width: 900px; margin: 0 auto; }
+        .how-step { flex: 1; min-width: 200px; max-width: 260px; }
+        .step-num {
+            width: 48px; height: 48px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: #000; font-weight: 800; font-size: 1.2rem;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 14px;
+        }
+        .how-step h4 { margin-bottom: 6px; font-size: 1rem; }
+        .how-step p { font-size: 0.85rem; color: var(--text2); line-height: 1.5; }
+
+        /* Pricing */
+        .pricing-section {
+            padding: 70px 20px; text-align: center;
+            background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+        }
+        .pricing-section h2 { font-size: 2rem; margin-bottom: 10px; }
+        .pricing-section > p { color: var(--text2); margin-bottom: 40px; font-size: 1rem; }
+
+        .pricing-cards { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
+        .price-card {
+            background: var(--bg3); border: 2px solid var(--border);
+            border-radius: 20px; padding: 38px 30px; width: 330px;
+            text-align: center; position: relative; transition: all 0.3s;
+        }
+        .price-card.featured { border-color: var(--accent); }
+        .price-card.featured::before {
+            content: 'MAIS POPULAR'; position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: #000; padding: 4px 20px; border-radius: 50px;
+            font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;
+        }
+        .price-card:hover { transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,0.3); }
+
+        .price-card h3 { font-size: 1.15rem; margin-bottom: 12px; color: var(--text); }
+        .price-val { font-size: 3rem; font-weight: 900; color: var(--accent3); }
+        .price-val small { font-size: 1rem; color: var(--text2); font-weight: 400; }
+        .price-period { color: var(--text2); font-size: 0.88rem; margin-bottom: 22px; }
+        .price-features { text-align: left; margin-bottom: 28px; }
+        .price-features li {
+            list-style: none; padding: 8px 0; font-size: 0.9rem; color: var(--text2);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .price-features li::before { content: '✓'; color: var(--accent); font-weight: 700; }
+
+        /* Buttons */
+        .btn {
+            display: inline-block; padding: 14px 32px; border-radius: 12px;
+            font-size: 1rem; font-weight: 700; border: none; cursor: pointer;
+            text-decoration: none; transition: all 0.3s; width: 100%;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #000; }
+        .btn-primary:hover { background: linear-gradient(135deg, var(--accent3), var(--accent)); transform: scale(1.02); box-shadow: 0 6px 24px rgba(16,185,129,0.3); }
+        .btn-stripe { background: linear-gradient(135deg, var(--purple), #7c3aed); color: #fff; margin-top: 10px; }
+        .btn-stripe:hover { background: linear-gradient(135deg, #7c3aed, #6d28d9); box-shadow: 0 6px 24px rgba(139,92,246,0.3); }
+        .btn-login { background: linear-gradient(135deg, var(--blue), #2563eb); color: #fff; }
+        .btn-login:hover { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+        .btn-sm { padding: 10px 20px; font-size: 0.9rem; width: auto; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* Login */
+        .login-section { padding: 50px 20px; text-align: center; background: var(--bg); }
+        .login-box {
+            max-width: 420px; margin: 0 auto; background: var(--bg2);
+            border: 1px solid var(--border); border-radius: 20px; padding: 36px;
+        }
+        .login-box h3 { margin-bottom: 8px; font-size: 1.2rem; }
+        .login-box .subtitle { color: var(--text2); margin-bottom: 20px; font-size: 0.9rem; }
+        .login-box input {
+            width: 100%; padding: 14px 18px; border-radius: 12px;
+            border: 1px solid var(--border); background: var(--bg3);
+            color: var(--text); font-size: 1rem; margin-bottom: 14px;
+            outline: none; transition: border-color 0.2s;
+        }
+        .login-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16,185,129,0.1); }
+
+        /* ===== APP PANEL ===== */
+        .app-panel { display: none; min-height: 100vh; background: var(--bg); }
+        .app-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 24px; background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+        }
+        .app-logo { font-size: 1.3rem; font-weight: 800; }
+        .app-logo span { color: var(--accent); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-info .badge {
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: #000; padding: 5px 14px; border-radius: 20px;
+            font-size: 0.75rem; font-weight: 700;
+        }
+        .btn-logout {
+            background: transparent; border: 1px solid var(--border);
+            color: var(--text2); padding: 7px 16px; border-radius: 8px;
+            cursor: pointer; font-size: 0.85rem; transition: all 0.2s;
+        }
+        .btn-logout:hover { border-color: var(--danger); color: var(--danger); }
+
+        .quick-actions { display: flex; gap: 10px; padding: 20px 24px; flex-wrap: wrap; }
+        .action-btn {
+            padding: 11px 20px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--bg2); color: var(--text); cursor: pointer;
+            font-size: 0.9rem; transition: all 0.2s;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .action-btn:hover { border-color: var(--accent); background: var(--bg3); }
+        .action-btn.active { border-color: var(--accent); background: rgba(16,185,129,0.12); color: var(--accent3); }
+
+        .chat-area { padding: 0 24px 24px; display: flex; flex-direction: column; gap: 16px; }
+        .messages {
+            flex: 1; min-height: 400px; max-height: 60vh; overflow-y: auto;
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: 16px; padding: 24px;
+        }
+        .message { margin-bottom: 18px; line-height: 1.75; }
+        .message.user {
+            background: rgba(59,130,246,0.08); border-left: 3px solid var(--blue);
+            padding: 14px 18px; border-radius: 0 12px 12px 0;
+        }
+        .message.assistant { padding: 14px 0; }
+        .message.assistant strong { color: var(--accent3); }
+        .message .timestamp { font-size: 0.73rem; color: var(--text2); margin-top: 8px; }
+        .typing-indicator { color: var(--accent); font-style: italic; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .typing-indicator::after { content: '...'; animation: blink 1.2s infinite; }
+
+        .input-area { display: flex; gap: 10px; }
+        .input-area textarea {
+            flex: 1; padding: 14px 18px; border-radius: 12px;
+            border: 1px solid var(--border); background: var(--bg2);
+            color: var(--text); font-size: 1rem; resize: vertical;
+            min-height: 56px; max-height: 200px; outline: none;
+            font-family: inherit; transition: border-color 0.2s;
+        }
+        .input-area textarea:focus { border-color: var(--accent); }
+        .send-btn {
+            padding: 14px 28px; border-radius: 12px; border: none;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: #000; font-weight: 700; font-size: 1rem;
+            cursor: pointer; transition: all 0.2s; white-space: nowrap;
+        }
+        .send-btn:hover { background: linear-gradient(135deg, var(--accent3), var(--accent)); }
+        .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        /* Footer */
+        .footer {
+            text-align: center; padding: 35px 20px; color: var(--text2);
+            font-size: 0.84rem; border-top: 1px solid var(--border); margin-top: auto;
+        }
+        .footer a { color: var(--accent); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+
+        /* Modals */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.75); z-index: 1000;
+            align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: 22px; padding: 38px; max-width: 480px; width: 90%;
+            text-align: center; animation: modalIn 0.25s ease-out;
+        }
+        @keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal h3 { margin-bottom: 12px; font-size: 1.3rem; }
+        .modal p { color: var(--text2); margin-bottom: 18px; font-size: 0.95rem; }
+        .modal .code-display {
+            font-size: 1.8rem; font-weight: 900; color: var(--accent3);
+            background: var(--bg3); padding: 18px; border-radius: 14px;
+            margin: 16px 0; letter-spacing: 4px; font-family: 'Courier New', monospace;
+            border: 1px solid var(--border);
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed; bottom: 24px; right: 24px;
+            background: var(--bg2); border: 1px solid var(--accent);
+            border-radius: 14px; padding: 14px 22px; z-index: 2000;
+            transform: translateX(150%); transition: transform 0.3s ease;
+            max-width: 360px; font-size: 0.92rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .toast.show { transform: translateX(0); }
+        .toast.error { border-color: var(--danger); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .logo { font-size: 2.2rem; }
+            .hero { padding: 60px 16px 50px; }
+            .hero p { font-size: 1rem; }
+            .hero-stats { gap: 28px; }
+            .pricing-cards { flex-direction: column; align-items: center; }
+            .how-steps { flex-direction: column; align-items: center; }
+            .app-header { flex-direction: column; gap: 10px; }
+            .input-area { flex-direction: column; }
+            .send-btn { width: 100%; }
+            .features { padding: 40px 16px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ===== LANDING PAGE ===== -->
+<div id="landingPage" class="landing">
+
+    <!-- Hero -->
+    <div class="hero">
+        <div class="hero-content">
+            <div class="badge-top">&#9889; Análises com Inteligência Artificial</div>
+            <div class="logo">Bet<span>Analyst</span> <span class="pro">PRO</span></div>
+            <p>Análises esportivas profissionais com inteligência artificial avançada. Pré-jogo, ao vivo, escanteios e cartões — tudo em um só lugar.</p>
+            <div class="hero-stats">
+                <div class="stat"><div class="stat-num">4</div><div class="stat-label">Modos de Análise</div></div>
+                <div class="stat"><div class="stat-num">AI</div><div class="stat-label">GPT-4 Avançado</div></div>
+                <div class="stat"><div class="stat-num">24/7</div><div class="stat-label">Disponível Sempre</div></div>
+                <div class="stat"><div class="stat-num">&#9889;</div><div class="stat-label">Tempo Real</div></div>
+            </div>
+            <div class="hero-cta">
+                <a href="#pricing" class="btn btn-primary" onclick="smoothScroll('pricing')">Assinar Agora</a>
+                <a href="#login" class="btn btn-outline" onclick="smoothScroll('login')">Já tenho acesso</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features -->
+    <div class="features">
+        <div class="feature-card">
+            <span class="feature-icon">&#127951;</span>
+            <h3>Análise Pré-Jogo</h3>
+            <p>Estatísticas completas, confrontos diretos, forma recente, lesões, condições e motivação das equipes.</p>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">&#9889;</span>
+            <h3>Análise ao Vivo</h3>
+            <p>Leitura de momentum, posse de bola, finalizações, pressão e oportunidades em tempo real.</p>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">&#128314;</span>
+            <h3>Análise de Escanteios</h3>
+            <p>Padrões por equipe, médias por tempo, correlação com estilo de jogo e tendências.</p>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">&#129668;</span>
+            <h3>Análise de Cartões</h3>
+            <p>Perfil disciplinar, histórico do árbitro, rivalidade e intensidade esperada do jogo.</p>
+        </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="how-section">
+        <h2>Como Funciona</h2>
+        <div class="how-steps">
+            <div class="how-step">
+                <div class="step-num">1</div>
+                <h4>Escolha o plano</h4>
+                <p>Assine via PIX ou cartão de crédito e receba seu código de acesso.</p>
+            </div>
+            <div class="how-step">
+                <div class="step-num">2</div>
+                <h4>Faça login</h4>
+                <p>Use seu código de acesso para entrar no painel de análises.</p>
+            </div>
+            <div class="how-step">
+                <div class="step-num">3</div>
+                <h4>Analise jogos</h4>
+                <p>Escolha o modo de análise, insira o jogo e receba insights detalhados com IA.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pricing -->
+    <div class="pricing-section" id="pricing">
+        <h2>Escolha seu Plano</h2>
+        <p>Acesso completo a todas as análises profissionais por 30 dias</p>
+        <div class="pricing-cards">
+            <div class="price-card featured">
+                <h3>&#127463;&#127479; Plano Brasil</h3>
+                <div class="price-val">R$ {{ price_brl|default('190,00') }}<small>/mês</small></div>
+                <div class="price-period">PIX — Aprovação instantânea</div>
+                <ul class="price-features">
+                    <li>Análises ilimitadas</li>
+                    <li>4 modos de análise</li>
+                    <li>IA avançada (GPT-4)</li>
+                    <li>Suporte via WhatsApp</li>
+                    <li>Acesso imediato após pagamento</li>
+                </ul>
+                <button class="btn btn-primary" onclick="handlePixPayment()">Pagar com PIX</button>
+            </div>
+            <div class="price-card">
+                <h3>&#127757; International Plan</h3>
+                <div class="price-val">US$ {{ price_usd|default('35.00') }}<small>/mo</small></div>
+                <div class="price-period">Credit Card — Stripe</div>
+                <ul class="price-features">
+                    <li>Unlimited analyses</li>
+                    <li>4 analysis modes</li>
+                    <li>Advanced AI (GPT-4)</li>
+                    <li>Email support</li>
+                    <li>Instant access after payment</li>
+                </ul>
+                <button class="btn btn-stripe" onclick="handleStripePayment()">Pay with Card</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login -->
+    <div class="login-section" id="login">
+        <div class="login-box">
+            <h3>Já tem código de acesso?</h3>
+            <p class="subtitle">Insira seu código para acessar o painel de análises</p>
+            <input type="text" id="accessCode" placeholder="Digite seu código de acesso" onkeypress="if(event.key==='Enter') doLogin()" autocomplete="off" spellcheck="false">
+            <button class="btn btn-login" onclick="doLogin()" style="width:100%">Entrar</button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>BetAnalyst Pro &copy; 2024–2026 — Análises esportivas com inteligência artificial</p>
+        <p style="margin-top:8px;">&#9888;&#65039; Apostas esportivas envolvem risco. Aposte com responsabilidade.</p>
+    </div>
+</div>
+
+<!-- ===== APP PANEL ===== -->
+<div id="appPanel" class="app-panel">
+    <div class="app-header">
+        <div class="app-logo">Bet<span>Analyst</span> PRO</div>
+        <div class="user-info">
+            <span class="badge">PRO ATIVO</span>
+            <button class="btn-logout" onclick="doLogout()">Sair</button>
+        </div>
+    </div>
+
+    <div class="quick-actions">
+        <button class="action-btn active" data-mode="pre-game" onclick="setMode(this)">&#127951; Pré-Jogo</button>
+        <button class="action-btn" data-mode="live" onclick="setMode(this)">&#9889; Ao Vivo</button>
+        <button class="action-btn" data-mode="corners" onclick="setMode(this)">&#128314; Escanteios</button>
+        <button class="action-btn" data-mode="cards" onclick="setMode(this)">&#129668; Cartões</button>
+    </div>
+
+    <div class="chat-area">
+        <div class="messages" id="messages">
+            <div class="message assistant">
+                <p><strong>Bem-vindo ao BetAnalyst Pro! &#128075;</strong></p>
+                <p>Selecione um modo de análise acima e digite o jogo que deseja analisar.</p>
+                <p>Exemplo: <em>"Real Madrid vs Barcelona - La Liga, 15/04/2026"</em></p>
+            </div>
+        </div>
+        <div class="input-area">
+            <textarea id="promptInput" placeholder="Ex: Flamengo vs Palmeiras - Brasileirão Série A..." rows="2" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAnalysis()}"></textarea>
+            <button class="send-btn" id="sendBtn" onclick="sendAnalysis()">Analisar &#8594;</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODALS ===== -->
+<div class="modal-overlay" id="codeModal">
+    <div class="modal">
+        <h3>&#127881; Pagamento Aprovado!</h3>
+        <p>Seu código de acesso foi gerado. Guarde-o com segurança:</p>
+        <div class="code-display" id="newCodeDisplay">-</div>
+        <p style="font-size:0.85rem;">Este código é válido por 30 dias. Use-o para fazer login.</p>
+        <button class="btn btn-primary btn-sm" onclick="copyCodeAndLogin()" style="margin-top:12px;">Copiar e Entrar</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="pixModal">
+    <div class="modal">
+        <h3>&#128178; Pagamento PIX</h3>
+        <p>Escaneie o QR Code ou copie o código PIX:</p>
+        <div id="pixQrArea" style="margin: 15px 0;">
+            <div style="background:#fff; padding:20px; border-radius:14px; display:inline-block;">
+                <img id="pixQrImg" src="" alt="QR Code PIX" style="max-width:200px; display:none;">
+                <div id="pixQrFallback" style="font-size:0.9rem; color:#333;">Gerando QR Code...</div>
+            </div>
+        </div>
+        <textarea id="pixCopyCode" readonly style="width:100%;height:60px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:0.8rem;resize:none;margin:10px 0;"></textarea>
+        <button class="btn btn-primary btn-sm" onclick="copyPixCode()" style="margin-bottom:10px;">Copiar Código PIX</button>
+        <br>
+        <button class="btn btn-sm" style="background:var(--gold);color:#000;" onclick="checkPixPayment()">Já Paguei — Verificar</button>
+        <br><br>
+        <button class="btn-logout" onclick="closeModal('pixModal')">Cancelar</button>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ===== JAVASCRIPT ===== -->
+<script>
+let authToken = localStorage.getItem('ba_token') || '';
+let currentMode = 'pre-game';
+let isStreaming = false;
+let currentPixPaymentId = null;
+
+// Init
+(function init() {
+    const newCode = '{{ new_access_code|default("") }}';
+    if (newCode) {
+        document.getElementById('newCodeDisplay').textContent = newCode;
+        document.getElementById('codeModal').classList.add('active');
+    }
+    const cancelled = '{{ payment_cancelled|default("") }}';
+    if (cancelled === 'True') {
+        showToast('Pagamento cancelado.', 'error');
+    }
+    if (authToken) { showApp(); }
+})();
+
+function smoothScroll(id) {
+    document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+}
+
+async function doLogin() {
+    const code = document.getElementById('accessCode').value.trim();
+    if (!code) { showToast('Digite seu código de acesso', 'error'); return; }
+
+    try {
+        const res = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+        });
+        const data = await res.json();
+        if (data.success) {
+            authToken = data.token;
+            localStorage.setItem('ba_token', authToken);
+            showToast(data.message);
+            showApp();
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (e) {
+        showToast('Erro de conexão. Tente novamente.', 'error');
+    }
+}
+
+function doLogout() {
+    authToken = '';
+    localStorage.removeItem('ba_token');
+    document.getElementById('appPanel').style.display = 'none';
+    document.getElementById('landingPage').style.display = 'flex';
+}
+
+function showApp() {
+    document.getElementById('landingPage').style.display = 'none';
+    document.getElementById('appPanel').style.display = 'block';
+}
+
+function setMode(btn) {
+    document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.dataset.mode;
+}
+
+async function sendAnalysis() {
+    if (isStreaming) return;
+    const input = document.getElementById('promptInput');
+    const prompt = input.value.trim();
+    if (!prompt) return;
+
+    const messagesDiv = document.getElementById('messages');
+    const userMsg = document.createElement('div');
+    userMsg.className = 'message user';
+    const modeLabels = {'pre-game':'Pré-Jogo','live':'Ao Vivo','corners':'Escanteios','cards':'Cartões'};
+    userMsg.innerHTML = '<strong>' + (modeLabels[currentMode] || currentMode) + '</strong><br>' +
+        escapeHtml(prompt) + '<div class="timestamp">' + new Date().toLocaleTimeString('pt-BR') + '</div>';
+    messagesDiv.appendChild(userMsg);
+
+    const assistantMsg = document.createElement('div');
+    assistantMsg.className = 'message assistant';
+    assistantMsg.innerHTML = '<span class="typing-indicator">Analisando</span>';
+    messagesDiv.appendChild(assistantMsg);
+
+    input.value = '';
+    isStreaming = true;
+    document.getElementById('sendBtn').disabled = true;
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+    try {
+        const res = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: authToken, prompt, mode: currentMode })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            assistantMsg.innerHTML = '<span style="color:var(--danger)">' + (err.error || 'Erro na análise') + '</span>';
+            if (res.status === 401) { doLogout(); showToast('Sessão expirada.', 'error'); }
+            isStreaming = false;
+            document.getElementById('sendBtn').disabled = false;
+            return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = '';
+        assistantMsg.innerHTML = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const text = decoder.decode(value);
+            const lines = text.split('\n');
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (data.content) {
+                            fullContent += data.content;
+                            assistantMsg.innerHTML = renderMarkdown(fullContent) +
+                                '<div class="timestamp">' + new Date().toLocaleTimeString('pt-BR') + '</div>';
+                            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                        }
+                        if (data.error) {
+                            assistantMsg.innerHTML += '<br><span style="color:var(--danger)">' + data.error + '</span>';
+                        }
+                    } catch (e) {}
+                }
+            }
+        }
+    } catch (e) {
+        assistantMsg.innerHTML = '<span style="color:var(--danger)">Erro de conexão: ' + e.message + '</span>';
+    }
+    isStreaming = false;
+    document.getElementById('sendBtn').disabled = false;
+}
+
+async function handlePixPayment() {
+    showToast('Gerando pagamento PIX...');
+    try {
+        const res = await fetch('/api/payment/create-pix', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'cliente@betanalyst.pro' })
+        });
+        const data = await res.json();
+        if (data.mode === 'manual') {
+            document.getElementById('newCodeDisplay').textContent = data.access_code;
+            document.getElementById('codeModal').classList.add('active');
+            showToast(data.message);
+            return;
+        }
+        if (data.success) {
+            currentPixPaymentId = data.payment_id;
+            if (data.qr_code_base64) {
+                const img = document.getElementById('pixQrImg');
+                img.src = 'data:image/png;base64,' + data.qr_code_base64;
+                img.style.display = 'block';
+                document.getElementById('pixQrFallback').style.display = 'none';
+            }
+            if (data.qr_code) {
+                document.getElementById('pixCopyCode').value = data.qr_code;
+            }
+            document.getElementById('pixModal').classList.add('active');
+        } else {
+            showToast(data.error || 'Erro ao gerar PIX', 'error');
+        }
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+}
+
+async function handleStripePayment() {
+    showToast('Redirecionando para pagamento...');
+    try {
+        const res = await fetch('/api/payment/create-stripe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (data.mode === 'manual') {
+            document.getElementById('newCodeDisplay').textContent = data.access_code;
+            document.getElementById('codeModal').classList.add('active');
+            showToast(data.message);
+            return;
+        }
+        if (data.success && data.checkout_url) {
+            window.location.href = data.checkout_url;
+        } else {
+            showToast(data.error || 'Erro ao iniciar pagamento', 'error');
+        }
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+}
+
+function copyPixCode() {
+    navigator.clipboard.writeText(document.getElementById('pixCopyCode').value)
+        .then(() => showToast('Código PIX copiado!'));
+}
+
+async function checkPixPayment() {
+    if (!currentPixPaymentId) { showToast('Nenhum pagamento pendente', 'error'); return; }
+    showToast('Verificando pagamento...');
+    try {
+        const res = await fetch('/api/payment/verify-pix', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payment_id: currentPixPaymentId })
+        });
+        const data = await res.json();
+        if (data.status === 'approved') {
+            closeModal('pixModal');
+            document.getElementById('newCodeDisplay').textContent = data.access_code;
+            document.getElementById('codeModal').classList.add('active');
+            showToast('Pagamento aprovado!');
+        } else {
+            showToast(data.message || 'Aguardando confirmação...', 'error');
+        }
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+}
+
+function copyCodeAndLogin() {
+    const code = document.getElementById('newCodeDisplay').textContent;
+    navigator.clipboard.writeText(code).then(() => showToast('Código copiado!'));
+    closeModal('codeModal');
+    document.getElementById('accessCode').value = code;
+    doLogin();
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (type === 'error' ? ' error' : '');
+    setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMarkdown(text) {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/^### (.+)$/gm, '<h4 style="color:var(--accent3);margin:12px 0 6px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:var(--accent3);margin:14px 0 8px;">$1</h3>')
+        .replace(/^# (.+)$/gm, '<h2 style="color:var(--accent);margin:16px 0 10px;">$1</h2>')
+        .replace(/^- (.+)$/gm, '<li style="margin-left:16px;">$1</li>')
+        .replace(/\n{2,}/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+}
+</script>
+</body>
+</html>
