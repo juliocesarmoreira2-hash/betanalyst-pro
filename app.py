@@ -31,34 +31,34 @@ paid_codes = {}
 # ============================================================
 # SYSTEM PROMPT FOR BETTING ANALYSIS
 # ============================================================
-SYSTEM_PROMPT = """Voce e o BetAnalyst Pro, um analista esportivo profissional de elite com mais de 20 anos de experiencia em analise estatistica de jogos e apostas esportivas.
+SYSTEM_PROMPT = """Você é o BetAnalyst Pro, um analista esportivo profissional de elite com mais de 20 anos de experiência em análise estatística de jogos e apostas esportivas.
 
 ## SUAS ESPECIALIDADES:
-1. **Analise Pre-Jogo** - Estatisticas completas, confrontos diretos, forma recente, lesoes, suspensoes, condicoes climaticas, motivacao, tendencias historicas
-2. **Analise ao Vivo / In-Play** - Leitura de momento do jogo, momentum, posse de bola, finalizacoes, pressao, substituicoes taticas
-3. **Analise de Escanteios** - Padroes de escanteios por equipe, medias, tendencias primeiro/segundo tempo, correlacao com estilo de jogo
-4. **Analise de Cartoes** - Perfil disciplinar dos jogos, arbitro designado, historico de cartoes, rivalidade, intensidade esperada
+1. **Análise Pré-Jogo** - Estatísticas completas, confrontos diretos, forma recente, lesões, suspensões, condições climáticas, motivação, tendências históricas
+2. **Análise ao Vivo / In-Play** - Leitura de momento do jogo, momentum, posse de bola, finalizações, pressão, substituições táticas
+3. **Análise de Escanteios** - Padrões de escanteios por equipe, médias, tendências primeiro/segundo tempo, correlação com estilo de jogo
+4. **Análise de Cartões** - Perfil disciplinar dos jogos, árbitro designado, histórico de cartões, rivalidade, intensidade esperada
 
 ## FORMATO DE RESPOSTA:
-Para CADA analise, forneca:
-- **Dados Estatisticos** - Numeros concretos e relevantes
-- **Analise Aprofundada** - Interpretacao dos dados
-- **Tendencias Identificadas** - Padroes encontrados
-- **Recomendacao** - Sua sugestao baseada na analise (com nivel de confianca de 1 a 5)
-- **Alertas** - Fatores de risco ou variaveis que podem alterar o cenario
-- **Value Bets** - Quando identificar oportunidades de valor
+Para CADA análise, forneça:
+- 📊 **Dados Estatísticos** - Números concretos e relevantes
+- 🔍 **Análise Aprofundada** - Interpretação dos dados
+- ⚡ **Tendências Identificadas** - Padrões encontrados
+- 🎯 **Recomendação** - Sua sugestão baseada na análise (com nível de confiança: ⭐ a ⭐⭐⭐⭐⭐)
+- ⚠️ **Alertas** - Fatores de risco ou variáveis que podem alterar o cenário
+- 💡 **Value Bets** - Quando identificar oportunidades de valor
 
 ## REGRAS:
-- Sempre baseie suas analises em dados e estatisticas reais quando disponiveis
+- Sempre baseie suas análises em dados e estatísticas reais quando disponíveis
 - Seja honesto sobre incertezas e riscos
 - Nunca garanta resultados - apostas envolvem risco
-- Forneca analises detalhadas e profissionais
-- Use portugues brasileiro
+- Forneça análises detalhadas e profissionais
+- Use português brasileiro
 - Inclua odds sugeridas quando relevante
 - Sempre mencione o disclaimer sobre responsabilidade em apostas
 
-## DISCLAIMER (incluir ao final de toda analise):
-*Apostas esportivas envolvem risco. Esta analise e apenas informativa e educacional. Aposte com responsabilidade e apenas valores que pode perder. Jogo responsavel.*"""
+## DISCLAIMER (incluir ao final de toda análise):
+⚠️ *Apostas esportivas envolvem risco. Esta análise é apenas informativa e educacional. Aposte com responsabilidade e apenas valores que pode perder. Jogo responsável.*"""
 
 
 # ============================================================
@@ -108,8 +108,8 @@ def create_session_token(access_code):
 @app.route('/')
 def index():
     return render_template('index.html',
-                         price_brl=PRICE_BRL,
-                         price_usd=PRICE_USD,
+                         price_brl=f"{PRICE_BRL:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                         price_usd=f"{PRICE_USD:.2f}",
                          stripe_key=STRIPE_PUBLISHABLE_KEY)
 
 
@@ -128,7 +128,7 @@ def authenticate():
         })
     return jsonify({
         'success': False,
-        'message': 'Codigo de acesso invalido. Adquira seu acesso na pagina inicial.'
+        'message': 'Código de acesso inválido. Adquira seu acesso na página inicial.'
     }), 401
 
 
@@ -142,20 +142,20 @@ def analyze():
 
     # Validate session
     if token not in active_sessions:
-        return jsonify({'error': 'Sessao invalida. Faca login novamente.'}), 401
+        return jsonify({'error': 'Sessão inválida. Faça login novamente.'}), 401
 
     if not prompt:
-        return jsonify({'error': 'Prompt nao pode estar vazio.'}), 400
+        return jsonify({'error': 'Prompt não pode estar vazio.'}), 400
 
     if not OPENROUTER_API_KEY:
-        return jsonify({'error': 'API nao configurada. Contate o administrador.'}), 500
+        return jsonify({'error': 'API não configurada. Contate o administrador.'}), 500
 
     # Build mode-specific prefix
     mode_prefixes = {
-        'pre-game': '[ANALISE PRE-JOGO]\n\n',
-        'live': '[ANALISE AO VIVO / IN-PLAY]\n\n',
-        'corners': '[ANALISE DE ESCANTEIOS]\n\n',
-        'cards': '[ANALISE DE CARTOES]\n\n'
+        'pre-game': '🏟️ [ANÁLISE PRÉ-JOGO]\n\n',
+        'live': '⚡ [ANÁLISE AO VIVO / IN-PLAY]\n\n',
+        'corners': '🔲 [ANÁLISE DE ESCANTEIOS]\n\n',
+        'cards': '🟨 [ANÁLISE DE CARTÕES]\n\n'
     }
     prefix = mode_prefixes.get(mode, '')
     full_prompt = prefix + prompt
@@ -219,6 +219,7 @@ def create_pix_payment():
     """Create a PIX payment via Mercado Pago"""
     try:
         if not MERCADOPAGO_ACCESS_TOKEN:
+            # Fallback: generate code manually (for testing/initial setup)
             code = generate_access_code()
             paid_codes[code] = {
                 'created': datetime.now().isoformat(),
@@ -229,7 +230,7 @@ def create_pix_payment():
             return jsonify({
                 'success': True,
                 'mode': 'manual',
-                'message': f'PIX ainda nao configurado. Codigo de teste gerado: {code}',
+                'message': f'PIX ainda não configurado. Código de teste gerado: {code}',
                 'access_code': code
             })
 
@@ -279,7 +280,7 @@ def create_stripe_payment():
             return jsonify({
                 'success': True,
                 'mode': 'manual',
-                'message': f'Stripe ainda nao configurado. Codigo de teste gerado: {code}',
+                'message': f'Stripe ainda não configurado. Código de teste gerado: {code}',
                 'access_code': code
             })
 
@@ -293,7 +294,7 @@ def create_stripe_payment():
                     'currency': 'usd',
                     'product_data': {
                         'name': PLAN_NAME,
-                        'description': 'Acesso mensal ao BetAnalyst Pro - Analises esportivas profissionais'
+                        'description': 'Acesso mensal ao BetAnalyst Pro - Análises esportivas profissionais'
                     },
                     'unit_amount': int(PRICE_USD * 100),
                 },
@@ -323,7 +324,7 @@ def verify_pix_payment():
             return jsonify({'success': False, 'error': 'Payment ID required'}), 400
 
         if not MERCADOPAGO_ACCESS_TOKEN:
-            return jsonify({'success': False, 'error': 'Mercado Pago nao configurado'}), 500
+            return jsonify({'success': False, 'error': 'Mercado Pago não configurado'}), 500
 
         import mercadopago
         sdk = mercadopago.SDK(MERCADOPAGO_ACCESS_TOKEN)
@@ -342,13 +343,13 @@ def verify_pix_payment():
                 'success': True,
                 'status': 'approved',
                 'access_code': code,
-                'message': f'Pagamento aprovado! Seu codigo de acesso: {code}'
+                'message': f'Pagamento aprovado! Seu código de acesso: {code}'
             })
         else:
             return jsonify({
                 'success': True,
                 'status': payment['response']['status'],
-                'message': 'Aguardando confirmacao do pagamento...'
+                'message': 'Aguardando confirmação do pagamento...'
             })
 
     except Exception as e:
@@ -368,8 +369,8 @@ def payment_success():
         'amount': PRICE_USD
     }
     return render_template('index.html',
-                         price_brl=PRICE_BRL,
-                         price_usd=PRICE_USD,
+                         price_brl=f"{PRICE_BRL:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                         price_usd=f"{PRICE_USD:.2f}",
                          stripe_key=STRIPE_PUBLISHABLE_KEY,
                          new_access_code=code)
 
@@ -377,8 +378,8 @@ def payment_success():
 @app.route('/payment/cancel')
 def payment_cancel():
     return render_template('index.html',
-                         price_brl=PRICE_BRL,
-                         price_usd=PRICE_USD,
+                         price_brl=f"{PRICE_BRL:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                         price_usd=f"{PRICE_USD:.2f}",
                          stripe_key=STRIPE_PUBLISHABLE_KEY,
                          payment_cancelled=True)
 
@@ -387,12 +388,14 @@ def payment_cancel():
 def mercadopago_webhook():
     """Handle Mercado Pago webhooks"""
     data = request.json or {}
+    # In production: verify webhook signature, process payment
     return jsonify({'received': True}), 200
 
 
 @app.route('/api/webhook/stripe', methods=['POST'])
 def stripe_webhook():
     """Handle Stripe webhooks"""
+    # In production: verify webhook signature, process payment
     return jsonify({'received': True}), 200
 
 
