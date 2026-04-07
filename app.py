@@ -3,11 +3,20 @@ import json
 import time
 import hashlib
 import secrets
+import logging
 from datetime import datetime, timedelta
 from flask import Flask, request, Response, render_template, jsonify, session
+from functools import wraps
 
+# ============================================================
+# APP INITIALIZATION
+# ============================================================
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # CONFIGURATION
@@ -17,11 +26,17 @@ ACCESS_CODES = [c.strip() for c in os.environ.get('ACCESS_CODES', '').split(',')
 MERCADOPAGO_ACCESS_TOKEN = os.environ.get('MERCADOPAGO_ACCESS_TOKEN', '')
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 
 # Pricing
 PRICE_BRL = 190.00
 PRICE_USD = 35.00
 PLAN_NAME = "BetAnalyst Pro - Assinatura Mensal"
+
+# Rate limiting (simple in-memory)
+rate_limit_store = {}
+RATE_LIMIT_MAX = 30  # max requests per window
+RATE_LIMIT_WINDOW = 60  # seconds
 
 # Simple in-memory store for active sessions (production would use a DB)
 active_sessions = {}
@@ -60,27 +75,39 @@ Para CADA análise, forneça:
 ## DISCLAIMER (incluir ao final de toda análise):
 ⚠️ *Apostas esportivas envolvem risco. Esta análise é apenas informativa e educacional. Aposte com responsabilidade e apenas valores que pode perder. Jogo responsável.*"""
 
-
 # ============================================================
 # HELPER FUNCTIONS
 # ============================================================
+
+def format_brl(value):
+    """Format a float as Brazilian Real currency string: R$190,00"""
+    formatted = f"{value:,.2f}"
+    # Swap . and , for Brazilian format
+    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+    return formatted
+
+
 def validate_access(code):
     """Validate an access code"""
     if not code:
         return False
+
     code = code.strip().upper()
+
     # Check static access codes
     if code in [c.upper() for c in ACCESS_CODES]:
         return True
+
     # Check paid/generated codes
     if code in paid_codes:
         expiry = paid_codes[code].get('expires')
         if expiry and datetime.fromisoformat(expiry) > datetime.now():
             return True
         elif expiry:
+            # Code expired, remove it
             del paid_codes[code]
             return False
-        return True
+
     return False
 
 
@@ -101,16 +128,51 @@ def create_session_token(access_code):
     return token
 
 
+def check_rate_limit(identifier):
+    """Simple rate limiter. Returns True if allowed, False if rate limited."""
+    now = time.time()
+    if identifier not in rate_limit_store:
+        rate_limit_store[identifier] = []
+
+    # Clean old entries
+    rate_limit_store[identifier] = [
+        t for t in rate_limit_store[identifier]
+        if now - t < RATE_LIMIT_WINDOW
+    ]
+
+    if len(rate_limit_store[identifier]) >= RATE_LIMIT_MAX:
+        return False
+
+    rate_limit_store[identifier].append(now)
+    return True
+
+
+def cleanup_expired_sessions():
+    """Remove sessions older than 24 hours"""
+    now = datetime.now()
+    expired = []
+    for token, data in active_sessions.items():
+        created = datetime.fromisoformat(data['created'])
+        if (now - created).total_seconds() > 86400:  # 24h
+            expired.append(token)
+    for token in expired:
+        del active_sessions[token]
+
+
 # ============================================================
 # ROUTES
 # ============================================================
 
 @app.route('/')
 def index():
+    # Cleanup expired sessions periodically
+    cleanup_expired_sessions()
+
     return render_template('index.html',
-                         price_brl=f"{PRICE_BRL:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-                         price_usd=f"{PRICE_USD:.2f}",
-                         stripe_key=STRIPE_PUBLISHABLE_KEY)
+        price_brl=format_brl(PRICE_BRL),
+        price_usd=f"{PRICE_USD:.2f}",
+        stripe_key=STRIPE_PUBLISHABLE_KEY
+    )
 
 
 @app.route('/api/auth', methods=['POST'])
@@ -119,6 +181,12 @@ def authenticate():
     data = request.json or {}
     code = data.get('code', '').strip()
 
+    if not code:
+        return jsonify({
+            'success': False,
+            'message': 'Código de acesso não informado.'
+        }), 400
+
     if validate_access(code):
         token = create_session_token(code)
         return jsonify({
@@ -126,6 +194,7 @@ def authenticate():
             'token': token,
             'message': 'Acesso autorizado! Bem-vindo ao BetAnalyst Pro.'
         })
+
     return jsonify({
         'success': False,
         'message': 'Código de acesso inválido. Adquira seu acesso na página inicial.'
@@ -137,7 +206,7 @@ def analyze():
     """Run betting analysis with streaming"""
     data = request.json or {}
     token = data.get('token', '')
-    prompt = data.get('prompt', '')
+    prompt = data.get('prompt', '').strip()
     mode = data.get('mode', 'pre-game')
 
     # Validate session
@@ -149,6 +218,15 @@ def analyze():
 
     if not OPENROUTER_API_KEY:
         return jsonify({'error': 'API não configurada. Contate o administrador.'}), 500
+
+    # Rate limiting per session token
+    if not check_rate_limit(token):
+        return jsonify({'error': 'Muitas requisições. Aguarde um momento.'}), 429
+
+    # Validate mode
+    valid_modes = ['pre-game', 'live', 'corners', 'cards']
+    if mode not in valid_modes:
+        mode = 'pre-game'
 
     # Build mode-specific prefix
     mode_prefixes = {
@@ -190,14 +268,14 @@ def analyze():
             yield f"data: {json.dumps({'done': True})}\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            logger.error(f"Analysis error: {e}")
+            yield f"data: {json.dumps({'error': 'Erro na análise. Tente novamente.'})}\n\n"
 
-    return Response(generate(), mimetype='text/event-stream',
-                   headers={
-                       'Cache-Control': 'no-cache',
-                       'X-Accel-Buffering': 'no',
-                       'Connection': 'keep-alive'
-                   })
+    return Response(generate(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+        'Connection': 'keep-alive'
+    })
 
 
 @app.route('/api/health')
@@ -205,7 +283,12 @@ def health():
     return jsonify({
         'status': 'ok',
         'service': 'BetAnalyst Pro',
+        'version': '1.0.0',
         'api_configured': bool(OPENROUTER_API_KEY),
+        'payments': {
+            'pix': bool(MERCADOPAGO_ACCESS_TOKEN),
+            'stripe': bool(STRIPE_SECRET_KEY)
+        },
         'active_sessions': len(active_sessions)
     })
 
@@ -219,7 +302,6 @@ def create_pix_payment():
     """Create a PIX payment via Mercado Pago"""
     try:
         if not MERCADOPAGO_ACCESS_TOKEN:
-            # Fallback: generate code manually (for testing/initial setup)
             code = generate_access_code()
             paid_codes[code] = {
                 'created': datetime.now().isoformat(),
@@ -237,12 +319,16 @@ def create_pix_payment():
         import mercadopago
         sdk = mercadopago.SDK(MERCADOPAGO_ACCESS_TOKEN)
 
+        email = request.json.get('email', '').strip()
+        if not email:
+            email = 'cliente@betanalyst.pro'
+
         payment_data = {
             "transaction_amount": PRICE_BRL,
             "description": PLAN_NAME,
             "payment_method_id": "pix",
             "payer": {
-                "email": request.json.get('email', 'cliente@betanalyst.pro')
+                "email": email
             }
         }
 
@@ -259,10 +345,12 @@ def create_pix_payment():
                 'amount': PRICE_BRL
             })
         else:
-            return jsonify({'success': False, 'error': 'Falha ao criar pagamento'}), 500
+            logger.error(f"PIX payment creation failed: {result}")
+            return jsonify({'success': False, 'error': 'Falha ao criar pagamento PIX'}), 500
 
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"PIX payment error: {e}")
+        return jsonify({'success': False, 'error': 'Erro ao processar pagamento.'}), 500
 
 
 @app.route('/api/payment/create-stripe', methods=['POST'])
@@ -312,7 +400,8 @@ def create_stripe_payment():
         })
 
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Stripe payment error: {e}")
+        return jsonify({'success': False, 'error': 'Erro ao processar pagamento.'}), 500
 
 
 @app.route('/api/payment/verify-pix', methods=['POST'])
@@ -336,7 +425,7 @@ def verify_pix_payment():
                 'created': datetime.now().isoformat(),
                 'expires': (datetime.now() + timedelta(days=30)).isoformat(),
                 'method': 'pix',
-                'payment_id': payment_id,
+                'payment_id': str(payment_id),
                 'amount': PRICE_BRL
             }
             return jsonify({
@@ -353,7 +442,8 @@ def verify_pix_payment():
             })
 
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"PIX verification error: {e}")
+        return jsonify({'success': False, 'error': 'Erro ao verificar pagamento.'}), 500
 
 
 @app.route('/payment/success')
@@ -369,37 +459,110 @@ def payment_success():
         'amount': PRICE_USD
     }
     return render_template('index.html',
-                         price_brl=f"{PRICE_BRL:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-                         price_usd=f"{PRICE_USD:.2f}",
-                         stripe_key=STRIPE_PUBLISHABLE_KEY,
-                         new_access_code=code)
+        price_brl=format_brl(PRICE_BRL),
+        price_usd=f"{PRICE_USD:.2f}",
+        stripe_key=STRIPE_PUBLISHABLE_KEY,
+        new_access_code=code
+    )
 
 
 @app.route('/payment/cancel')
 def payment_cancel():
     return render_template('index.html',
-                         price_brl=f"{PRICE_BRL:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-                         price_usd=f"{PRICE_USD:.2f}",
-                         stripe_key=STRIPE_PUBLISHABLE_KEY,
-                         payment_cancelled=True)
+        price_brl=format_brl(PRICE_BRL),
+        price_usd=f"{PRICE_USD:.2f}",
+        stripe_key=STRIPE_PUBLISHABLE_KEY,
+        payment_cancelled=True
+    )
 
 
 @app.route('/api/webhook/mercadopago', methods=['POST'])
 def mercadopago_webhook():
     """Handle Mercado Pago webhooks"""
-    data = request.json or {}
-    # In production: verify webhook signature, process payment
-    return jsonify({'received': True}), 200
+    try:
+        data = request.json or {}
+        action = data.get('action', '')
+        logger.info(f"MercadoPago webhook: action={action}")
+
+        if action == 'payment.updated' and MERCADOPAGO_ACCESS_TOKEN:
+            payment_id = data.get('data', {}).get('id')
+            if payment_id:
+                import mercadopago
+                sdk = mercadopago.SDK(MERCADOPAGO_ACCESS_TOKEN)
+                payment = sdk.payment().get(payment_id)
+
+                if payment['response']['status'] == 'approved':
+                    code = generate_access_code()
+                    paid_codes[code] = {
+                        'created': datetime.now().isoformat(),
+                        'expires': (datetime.now() + timedelta(days=30)).isoformat(),
+                        'method': 'pix_webhook',
+                        'payment_id': str(payment_id),
+                        'amount': PRICE_BRL
+                    }
+                    logger.info(f"PIX payment {payment_id} approved via webhook. Code: {code}")
+
+        return jsonify({'received': True}), 200
+
+    except Exception as e:
+        logger.error(f"MercadoPago webhook error: {e}")
+        return jsonify({'received': True}), 200
 
 
 @app.route('/api/webhook/stripe', methods=['POST'])
 def stripe_webhook():
-    """Handle Stripe webhooks"""
-    # In production: verify webhook signature, process payment
-    return jsonify({'received': True}), 200
+    """Handle Stripe webhooks with signature verification"""
+    try:
+        payload = request.get_data(as_text=True)
+
+        if STRIPE_WEBHOOK_SECRET and STRIPE_SECRET_KEY:
+            import stripe
+            stripe.api_key = STRIPE_SECRET_KEY
+            sig_header = request.headers.get('Stripe-Signature', '')
+
+            try:
+                event = stripe.Webhook.construct_event(
+                    payload, sig_header, STRIPE_WEBHOOK_SECRET
+                )
+            except (ValueError, stripe.error.SignatureVerificationError) as e:
+                logger.error(f"Stripe webhook signature verification failed: {e}")
+                return jsonify({'error': 'Invalid signature'}), 400
+
+            if event['type'] == 'checkout.session.completed':
+                session_data = event['data']['object']
+                code = generate_access_code()
+                paid_codes[code] = {
+                    'created': datetime.now().isoformat(),
+                    'expires': (datetime.now() + timedelta(days=30)).isoformat(),
+                    'method': 'stripe_webhook',
+                    'session_id': session_data.get('id'),
+                    'amount': PRICE_USD
+                }
+                logger.info(f"Stripe payment completed via webhook. Code: {code}")
+
+        return jsonify({'received': True}), 200
+
+    except Exception as e:
+        logger.error(f"Stripe webhook error: {e}")
+        return jsonify({'received': True}), 200
 
 
 # ============================================================
+# ERROR HANDLERS
+# ============================================================
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({'error': 'Página não encontrada'}), 404
+
+
+@app.errorhandler(500)
+def server_error(e):
+    return jsonify({'error': 'Erro interno do servidor'}), 500
+
+
+# ===============================================================
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting BetAnalyst Pro on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
