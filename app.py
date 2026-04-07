@@ -1,118 +1,402 @@
-"""
-BetAnalyst Pro - Aplicacao Web de Analise de Apostas Esportivas
-Hospede gratuitamente no Render.com, Railway.app ou Vercel
-"""
-
 import os
 import json
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
-from openai import OpenAI
+import time
+import hashlib
+import secrets
+from datetime import datetime, timedelta
+from flask import Flask, request, Response, render_template, jsonify, session
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-SYSTEM_PROMPT = """
-Voce e o BetAnalyst Pro, um analista profissional de apostas esportivas com especializacao em futebol mundial e modelagem estatistica avancada.
+# ============================================================
+# CONFIGURATION
+# ============================================================
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
+ACCESS_CODES = [c.strip() for c in os.environ.get('ACCESS_CODES', '').split(',') if c.strip()]
+MERCADOPAGO_ACCESS_TOKEN = os.environ.get('MERCADOPAGO_ACCESS_TOKEN', '')
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
 
-Voce combina tres competencias em um unico sistema:
-1. Analise Pre-Jogo Completa (mercados tradicionais)
-2. Analise ao Vivo / In-Play (leitura de momentum em tempo real)
-3. Analises de Mercados Especiais (escanteios e cartoes)
+# Pricing
+PRICE_BRL = 190.00
+PRICE_USD = 35.00
+PLAN_NAME = "BetAnalyst Pro - Assinatura Mensal"
 
-## REGRAS GLOBAIS
+# Simple in-memory store for active sessions (production would use a DB)
+active_sessions = {}
+# Store for generated access codes from payments
+paid_codes = {}
 
-- Responda SEMPRE em portugues brasileiro, tom profissional e direto.
-- Nunca invente dados. Se nao tiver informacao suficiente, diga exatamente o que falta.
-- Use os dados mais recentes possiveis (ultimos 5-6 jogos de cada equipe).
-- Priorize Valor Esperado (EV+) - nunca recomende mercados com baixa probabilidade apenas por odds altas.
-- Gere SEMPRE 3 multiplas/entradas: Conservadora, Equilibrada e Agressiva.
-- Indique claramente qual e o melhor mercado EV+.
-- Finalize TODA analise com conclusao objetiva + frase de alerta sobre gestao de bankroll.
-- Nao faca promessas de acerto. Foque em probabilidade, nao em certeza.
-- Use emojis para organizar visualmente.
-- Busque dados reais de fontes como FBref, Sofascore, Transfermarkt, FlashScore, WhoScored, Understat.
+# ============================================================
+# SYSTEM PROMPT FOR BETTING ANALYSIS
+# ============================================================
+SYSTEM_PROMPT = """Voce e o BetAnalyst Pro, um analista esportivo profissional de elite com mais de 20 anos de experiencia em analise estatistica de jogos e apostas esportivas.
 
-## MODO 1 - ANALISE PRE-JOGO COMPLETA
-### Gatilho: Usuario envia apenas o nome do jogo
-Estrutura: Analise Profissional com 6 secoes: Validacao e Recalculo, Metricas Avancadas, Comparacao Chave, Cenarios Provaveis, Multiplas Recomendadas (Conservadora/Equilibrada/Agressiva), Mercado EV+
+## SUAS ESPECIALIDADES:
+1. **Analise Pre-Jogo** - Estatisticas completas, confrontos diretos, forma recente, lesoes, suspensoes, condicoes climaticas, motivacao, tendencias historicas
+2. **Analise ao Vivo / In-Play** - Leitura de momento do jogo, momentum, posse de bola, finalizacoes, pressao, substituicoes taticas
+3. **Analise de Escanteios** - Padroes de escanteios por equipe, medias, tendencias primeiro/segundo tempo, correlacao com estilo de jogo
+4. **Analise de Cartoes** - Perfil disciplinar dos jogos, arbitro designado, historico de cartoes, rivalidade, intensidade esperada
 
-## MODO 2 - ANALISE AO VIVO
-### Gatilho: Dados de jogo em andamento
-Estrutura: Resumo do Momento, Leitura Tatica, Sinais Estatisticos, Entradas ao Vivo, Alerta de Armadilha, Conclusao
+## FORMATO DE RESPOSTA:
+Para CADA analise, forneca:
+- **Dados Estatisticos** - Numeros concretos e relevantes
+- **Analise Aprofundada** - Interpretacao dos dados
+- **Tendencias Identificadas** - Padroes encontrados
+- **Recomendacao** - Sua sugestao baseada na analise (com nivel de confianca de 1 a 5)
+- **Alertas** - Fatores de risco ou variaveis que podem alterar o cenario
+- **Value Bets** - Quando identificar oportunidades de valor
 
-## MODO 3 - ESCANTEIOS
-### Gatilho: Mencao a escanteios ou corners
-Estrutura: Perfil, Tendencia Over/Under, Fatores-chave, Entradas, Riscos, Conclusao
+## REGRAS:
+- Sempre baseie suas analises em dados e estatisticas reais quando disponiveis
+- Seja honesto sobre incertezas e riscos
+- Nunca garanta resultados - apostas envolvem risco
+- Forneca analises detalhadas e profissionais
+- Use portugues brasileiro
+- Inclua odds sugeridas quando relevante
+- Sempre mencione o disclaimer sobre responsabilidade em apostas
 
-## MODO 4 - CARTOES
-### Gatilho: Mencao a cartoes, amarelos, vermelhos
-Estrutura: Perfil Disciplinar, Analise do Arbitro, Jogadores Expostos, Fatores de Tensao, Entradas, Conclusao
+## DISCLAIMER (incluir ao final de toda analise):
+*Apostas esportivas envolvem risco. Esta analise e apenas informativa e educacional. Aposte com responsabilidade e apenas valores que pode perder. Jogo responsavel.*"""
 
-## COMPORTAMENTO INTELIGENTE
-- Apenas nome do jogo -> MODO 1
-- ao vivo ou dados em andamento -> MODO 2
-- escanteios -> MODO 3
-- cartoes -> MODO 4
-- analise completa -> MODOS 1+3+4
 
-Toda analise DEVE terminar com alerta de bankroll.
-"""
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+def validate_access(code):
+    """Validate an access code"""
+    if not code:
+        return False
+    code = code.strip().upper()
+    # Check static access codes
+    if code in [c.upper() for c in ACCESS_CODES]:
+        return True
+    # Check paid/generated codes
+    if code in paid_codes:
+        expiry = paid_codes[code].get('expires')
+        if expiry and datetime.fromisoformat(expiry) > datetime.now():
+            return True
+        elif expiry:
+            del paid_codes[code]
+            return False
+        return True
+    return False
 
-@app.route("/")
+
+def generate_access_code():
+    """Generate a unique access code for paid users"""
+    code = 'BP' + secrets.token_hex(4).upper()
+    return code
+
+
+def create_session_token(access_code):
+    """Create a session token for authenticated users"""
+    token = secrets.token_hex(16)
+    active_sessions[token] = {
+        'code': access_code,
+        'created': datetime.now().isoformat(),
+        'analyses_count': 0
+    }
+    return token
+
+
+# ============================================================
+# ROUTES
+# ============================================================
+
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html',
+                         price_brl=PRICE_BRL,
+                         price_usd=PRICE_USD,
+                         stripe_key=STRIPE_PUBLISHABLE_KEY)
 
-@app.route("/api/analyze", methods=["POST"])
+
+@app.route('/api/auth', methods=['POST'])
+def authenticate():
+    """Authenticate with access code"""
+    data = request.json or {}
+    code = data.get('code', '').strip()
+
+    if validate_access(code):
+        token = create_session_token(code)
+        return jsonify({
+            'success': True,
+            'token': token,
+            'message': 'Acesso autorizado! Bem-vindo ao BetAnalyst Pro.'
+        })
+    return jsonify({
+        'success': False,
+        'message': 'Codigo de acesso invalido. Adquira seu acesso na pagina inicial.'
+    }), 401
+
+
+@app.route('/api/analyze', methods=['POST'])
 def analyze():
-    data = request.json
-    user_message = data.get("message", "").strip()
-    api_key = data.get("api_key", "").strip()
-    model = data.get("model", "gpt-4o").strip()
-    provider = data.get("provider", "openai").strip()
+    """Run betting analysis with streaming"""
+    data = request.json or {}
+    token = data.get('token', '')
+    prompt = data.get('prompt', '')
+    mode = data.get('mode', 'pre-game')
 
-    if not user_message:
-        return jsonify({"error": "Envie o nome do jogo."}), 400
-    if not api_key:
-        return jsonify({"error": "API Key e obrigatoria."}), 400
+    # Validate session
+    if token not in active_sessions:
+        return jsonify({'error': 'Sessao invalida. Faca login novamente.'}), 401
 
-    if provider == "anthropic":
-        base_url = "https://api.anthropic.com/v1/"
-    elif provider == "openrouter":
-        base_url = "https://openrouter.ai/api/v1"
-    else:
-        base_url = "https://api.openai.com/v1"
+    if not prompt:
+        return jsonify({'error': 'Prompt nao pode estar vazio.'}), 400
 
-    try:
-        client = OpenAI(api_key=api_key, base_url=base_url if provider != "openai" else None)
+    if not OPENROUTER_API_KEY:
+        return jsonify({'error': 'API nao configurada. Contate o administrador.'}), 500
 
-        def generate():
+    # Build mode-specific prefix
+    mode_prefixes = {
+        'pre-game': '[ANALISE PRE-JOGO]\n\n',
+        'live': '[ANALISE AO VIVO / IN-PLAY]\n\n',
+        'corners': '[ANALISE DE ESCANTEIOS]\n\n',
+        'cards': '[ANALISE DE CARTOES]\n\n'
+    }
+    prefix = mode_prefixes.get(mode, '')
+    full_prompt = prefix + prompt
+
+    # Track usage
+    active_sessions[token]['analyses_count'] += 1
+
+    def generate():
+        try:
+            import openai
+            client = openai.OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=OPENROUTER_API_KEY
+            )
+
             stream = client.chat.completions.create(
-                model=model,
+                model="openai/gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_message},
+                    {"role": "user", "content": full_prompt}
                 ],
-                temperature=0.4,
-                max_tokens=4096,
                 stream=True,
+                max_tokens=4000,
+                temperature=0.7
             )
-            for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
-            yield "data: [DONE]\n\n"
 
-        return Response(
-            stream_with_context(generate()),
-            mimetype="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    yield f"data: {json.dumps({'content': content})}\n\n"
+
+            yield f"data: {json.dumps({'done': True})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream',
+                   headers={
+                       'Cache-Control': 'no-cache',
+                       'X-Accel-Buffering': 'no',
+                       'Connection': 'keep-alive'
+                   })
+
+
+@app.route('/api/health')
+def health():
+    return jsonify({
+        'status': 'ok',
+        'service': 'BetAnalyst Pro',
+        'api_configured': bool(OPENROUTER_API_KEY),
+        'active_sessions': len(active_sessions)
+    })
+
+
+# ============================================================
+# PAYMENT ROUTES
+# ============================================================
+
+@app.route('/api/payment/create-pix', methods=['POST'])
+def create_pix_payment():
+    """Create a PIX payment via Mercado Pago"""
+    try:
+        if not MERCADOPAGO_ACCESS_TOKEN:
+            code = generate_access_code()
+            paid_codes[code] = {
+                'created': datetime.now().isoformat(),
+                'expires': (datetime.now() + timedelta(days=30)).isoformat(),
+                'method': 'pix_manual',
+                'amount': PRICE_BRL
+            }
+            return jsonify({
+                'success': True,
+                'mode': 'manual',
+                'message': f'PIX ainda nao configurado. Codigo de teste gerado: {code}',
+                'access_code': code
+            })
+
+        import mercadopago
+        sdk = mercadopago.SDK(MERCADOPAGO_ACCESS_TOKEN)
+
+        payment_data = {
+            "transaction_amount": PRICE_BRL,
+            "description": PLAN_NAME,
+            "payment_method_id": "pix",
+            "payer": {
+                "email": request.json.get('email', 'cliente@betanalyst.pro')
+            }
+        }
+
+        result = sdk.payment().create(payment_data)
+        payment = result["response"]
+
+        if payment.get("id"):
+            return jsonify({
+                'success': True,
+                'payment_id': payment['id'],
+                'qr_code': payment['point_of_interaction']['transaction_data']['qr_code'],
+                'qr_code_base64': payment['point_of_interaction']['transaction_data']['qr_code_base64'],
+                'ticket_url': payment['point_of_interaction']['transaction_data'].get('ticket_url', ''),
+                'amount': PRICE_BRL
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Falha ao criar pagamento'}), 500
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route("/api/health")
-def health():
-    return jsonify({"status": "ok", "app": "BetAnalyst Pro"})
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+@app.route('/api/payment/create-stripe', methods=['POST'])
+def create_stripe_payment():
+    """Create a Stripe checkout session"""
+    try:
+        if not STRIPE_SECRET_KEY:
+            code = generate_access_code()
+            paid_codes[code] = {
+                'created': datetime.now().isoformat(),
+                'expires': (datetime.now() + timedelta(days=30)).isoformat(),
+                'method': 'stripe_manual',
+                'amount': PRICE_USD
+            }
+            return jsonify({
+                'success': True,
+                'mode': 'manual',
+                'message': f'Stripe ainda nao configurado. Codigo de teste gerado: {code}',
+                'access_code': code
+            })
+
+        import stripe
+        stripe.api_key = STRIPE_SECRET_KEY
+
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {
+                        'name': PLAN_NAME,
+                        'description': 'Acesso mensal ao BetAnalyst Pro - Analises esportivas profissionais'
+                    },
+                    'unit_amount': int(PRICE_USD * 100),
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=request.host_url + 'payment/success?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url=request.host_url + 'payment/cancel',
+        )
+
+        return jsonify({
+            'success': True,
+            'checkout_url': checkout_session.url,
+            'session_id': checkout_session.id
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/payment/verify-pix', methods=['POST'])
+def verify_pix_payment():
+    """Check PIX payment status"""
+    try:
+        payment_id = request.json.get('payment_id')
+        if not payment_id:
+            return jsonify({'success': False, 'error': 'Payment ID required'}), 400
+
+        if not MERCADOPAGO_ACCESS_TOKEN:
+            return jsonify({'success': False, 'error': 'Mercado Pago nao configurado'}), 500
+
+        import mercadopago
+        sdk = mercadopago.SDK(MERCADOPAGO_ACCESS_TOKEN)
+        payment = sdk.payment().get(payment_id)
+
+        if payment['response']['status'] == 'approved':
+            code = generate_access_code()
+            paid_codes[code] = {
+                'created': datetime.now().isoformat(),
+                'expires': (datetime.now() + timedelta(days=30)).isoformat(),
+                'method': 'pix',
+                'payment_id': payment_id,
+                'amount': PRICE_BRL
+            }
+            return jsonify({
+                'success': True,
+                'status': 'approved',
+                'access_code': code,
+                'message': f'Pagamento aprovado! Seu codigo de acesso: {code}'
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'status': payment['response']['status'],
+                'message': 'Aguardando confirmacao do pagamento...'
+            })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/payment/success')
+def payment_success():
+    """Handle successful Stripe payment"""
+    session_id = request.args.get('session_id')
+    code = generate_access_code()
+    paid_codes[code] = {
+        'created': datetime.now().isoformat(),
+        'expires': (datetime.now() + timedelta(days=30)).isoformat(),
+        'method': 'stripe',
+        'session_id': session_id,
+        'amount': PRICE_USD
+    }
+    return render_template('index.html',
+                         price_brl=PRICE_BRL,
+                         price_usd=PRICE_USD,
+                         stripe_key=STRIPE_PUBLISHABLE_KEY,
+                         new_access_code=code)
+
+
+@app.route('/payment/cancel')
+def payment_cancel():
+    return render_template('index.html',
+                         price_brl=PRICE_BRL,
+                         price_usd=PRICE_USD,
+                         stripe_key=STRIPE_PUBLISHABLE_KEY,
+                         payment_cancelled=True)
+
+
+@app.route('/api/webhook/mercadopago', methods=['POST'])
+def mercadopago_webhook():
+    """Handle Mercado Pago webhooks"""
+    data = request.json or {}
+    return jsonify({'received': True}), 200
+
+
+@app.route('/api/webhook/stripe', methods=['POST'])
+def stripe_webhook():
+    """Handle Stripe webhooks"""
+    return jsonify({'received': True}), 200
+
+
+# ============================================================
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
